@@ -124,6 +124,7 @@ function chipRow(items, activeKey, group){
 }
 
 function starRow(rating, reviews){
+  if(rating == null) return `<div class="car-rating text-small">Yangi qo'shildi</div>`;
   return `<div class="car-rating">${icon('star')}<span>${rating}${reviews!=null ? ' ('+reviews+')' : ''}</span></div>`;
 }
 
@@ -139,13 +140,59 @@ function carCard(car){
     </div>
     <hr/>
     <div class="price-row">
-      <div class="text-price">${fmt(car.price)} so'm/kun</div>
+      <div class="text-price">${car.price ? fmt(car.price) + " so'm/kun" : "Narx kelishiladi"}</div>
       <button class="btn btn-primary btn-small" data-nav="booking" data-car="${car.id}">Band qilish</button>
     </div>
   </div>`;
 }
 
-function fmt(n){ return n.toLocaleString('ru-RU').replace(/,/g,' '); }
+function fmt(n){ return Number(n).toLocaleString('ru-RU').replace(/,/g,' '); }
+
+/* ---------------- real cars (owner-qo'shgan, Supabase'dan) ---------------- */
+
+let realCarsLoaded = false;
+
+function mapDbCarToAppCar(row){
+  const transKey = (row.transmission||'').toLowerCase()==='mexanika' ? 'mexanika' : 'avtomat';
+  const catMatch = CATEGORIES.find(c => c.label && row.category && c.label.toLowerCase()===String(row.category).toLowerCase());
+  const catKey = catMatch ? catMatch.key : 'ekonom';
+  const priceNum = parseInt(String(row.price||'').replace(/[^\d]/g,''), 10);
+  return {
+    id: 'db-' + row.id,
+    name: row.model || 'Nomsiz mashina',
+    trans: row.transmission || 'Avtomat',
+    seats: 5,
+    fuel: 'Benzin',
+    year: row.year || '',
+    city: 'Toshkent',
+    district: '',
+    price: isNaN(priceNum) ? 0 : priceNum,
+    rating: null,
+    reviews: null,
+    cat: [catKey, transKey],
+    ownerPhone: row.owner_phone || '',
+    isReal: true,
+  };
+}
+
+async function loadRealCars(){
+  const res = await dbListCars();
+  if(!res.ok || !res.data.length) return;
+  const existingIds = new Set(CARS.map(c=>c.id));
+  let added = false;
+  res.data.forEach(row => {
+    const mapped = mapDbCarToAppCar(row);
+    if(!existingIds.has(mapped.id)){
+      CARS.unshift(mapped);
+      existingIds.add(mapped.id);
+      added = true;
+    }
+  });
+  if(added){
+    realCarsLoaded = true;
+    render();
+  }
+}
 
 /* ---------------- screen templates ---------------- */
 
@@ -213,7 +260,7 @@ function screenLogin(){
     <div class="field"><label>Telefon raqam</label><input id="login-phone" type="tel" placeholder="+998 90 123 45 67"/></div>
     <div class="field"><label>Parol</label><input id="login-password" type="password" placeholder="Parolingiz"/></div>
     <p class="text-small" style="text-align:right;margin:-6px 0 20px"><a data-action="toast" data-msg="Parolni tiklash havolasi yuborildi (demo)" style="color:var(--color-accent-primary);font-weight:600;text-decoration:none">Parolni unutdingizmi?</a></p>
-    <button class="btn btn-primary" data-submit="login" data-target="${store.role==='owner'?'owner-cars':'home'}">Kirish</button>
+    <button class="btn btn-primary" data-submit="login">Kirish</button>
     <p class="text-small center" style="margin-top:16px">Akkountingiz yo'qmi? <a data-nav="role-select" style="color:var(--color-accent-primary);font-weight:600;text-decoration:none">Ro'yxatdan o'tish</a></p>
   </div>`;
 }
@@ -264,9 +311,9 @@ function screenCarDetails(){
     <div class="section-header" style="align-items:flex-start">
       <div>
         <div class="h-title">${car.name}</div>
-        <div class="text-secondary text-small" style="margin-top:6px">${car.rating} · ${car.reviews} sharh · ${car.city}, ${car.district}</div>
+        <div class="text-secondary text-small" style="margin-top:6px">${car.rating!=null ? car.rating+' · '+car.reviews+' sharh · ' : ''}${car.city}${car.district ? ', '+car.district : ''}</div>
       </div>
-      <div class="text-price">${fmt(car.price)}/kun</div>
+      <div class="text-price">${car.price ? fmt(car.price)+'/kun' : 'Narx kelishiladi'}</div>
     </div>
     <div class="spec-grid">
       <div class="spec-chip">${icon('gear')}${car.trans}</div>
@@ -284,7 +331,7 @@ function screenCarDetails(){
     </div>
   </div>
   <div class="sticky-cta">
-    <div class="price"><span>Jami (${days} kun)</span><b class="text-price">${fmt(car.price*days)} so'm</b></div>
+    <div class="price"><span>Jami (${days} kun)</span><b class="text-price">${car.price ? fmt(car.price*days)+" so'm" : 'Narx kelishiladi'}</b></div>
     <button class="btn btn-primary" data-nav="booking" data-car="${car.id}">Band qilish</button>
   </div>`;
 }
@@ -565,8 +612,21 @@ app.addEventListener('click', async (e) => {
 
     if(kind === 'login'){
       const phone = (document.getElementById('login-phone')||{}).value || '';
-      if(!store.currentUser) store.currentUser = { name: 'Mehmon', phone: phone.trim(), role: store.role };
-      return resetTo(submitEl.dataset.target);
+      const trimmedPhone = phone.trim();
+      let user = { name: 'Mehmon', phone: trimmedPhone, role: store.role };
+      let found = false;
+      if(dbReady() && trimmedPhone){
+        const res = await dbFindUserByPhone(trimmedPhone);
+        if(res.ok && res.user){
+          user = { name: res.user.name || 'Mehmon', phone: res.user.phone || trimmedPhone, role: res.user.role || store.role };
+          found = true;
+        }
+      }
+      store.currentUser = user;
+      store.role = user.role;
+      if(dbReady()) showToast(found ? `Xush kelibsiz, ${user.name}!` : "Akkount topilmadi, mehmon sifatida kirdingiz");
+      const target = user.role === 'owner' ? 'owner-cars' : 'home';
+      return resetTo(target);
     }
 
     if(kind === 'add-car'){
@@ -585,6 +645,7 @@ app.addEventListener('click', async (e) => {
         status: "Bo‘sh",
       });
       showToast(dbReady() ? (res.ok ? "Mashina saqlandi" : "Bazaga ulanishda xatolik yuz berdi") : "Mashina qo'shildi (demo)");
+      if(res.ok) loadRealCars();
       return navigate('owner-cars');
     }
 
@@ -678,9 +739,11 @@ function initTelegram(){
 /* ---------------- boot ---------------- */
 
 window.store = store; // debugging/testing convenience
+window.CARS = CARS;   // debugging/testing convenience
 
 setTheme(store.theme);
 render();
 initTelegram();
+loadRealCars();
 
 setTimeout(() => { if(store.screen === 'splash') resetTo('welcome'); }, 1600);
