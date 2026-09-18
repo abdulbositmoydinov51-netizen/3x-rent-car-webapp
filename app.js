@@ -241,6 +241,7 @@ function mapDbCarToAppCar(row){
   const priceNum = parseInt(String(row.price||'').replace(/[^\d]/g,''), 10);
   return {
     id: 'db-' + row.id,
+    dbId: row.id, // bazadagi asl (raqamli) id — holatini yangilashda kerak bo'ladi
     name: row.model || 'Nomsiz mashina',
     trans: row.transmission || 'Avtomat',
     seats: 5,
@@ -261,6 +262,20 @@ function mapDbCarToAppCar(row){
 // Haqiqiy (bazadan olingan) mashinalarni CARS ro'yxatiga har doim eng
 // so'nggi holatiga moslab qayta yozadi — shunda narx/holat ("Band"/"Bo'sh")
 // o'zgargani ham darhol aks etadi, eski nusxasi osilib qolmaydi.
+// Haqiqiy mashinaning holatini ("Band"/"Bo'sh") bazada yangilaydi va
+// mahalliy ro'yxatlarni (realCarRows, CARS) ham darhol moslashtiradi.
+// Ham owner o'zi qo'lda belgilaganda, ham renter band qilganda ishlatiladi.
+async function markCarStatus(dbId, status){
+  if(dbId == null) return { ok: false, reason: 'no-id' };
+  const res = await dbUpdateCarStatus(dbId, status);
+  if(res.ok){
+    const row = realCarRows.find(r => r.id === dbId);
+    if(row) row.status = status;
+    refreshCarsFromRows();
+  }
+  return res;
+}
+
 function refreshCarsFromRows(){
   const demoOnly = CARS.filter(c => !c.isReal);
   const mapped = realCarRows.map(mapDbCarToAppCar);
@@ -776,6 +791,12 @@ app.addEventListener('click', async (e) => {
         paymentMethod: store.payMethod,
       });
       showToast(dbReady() ? (res.ok ? "To'lov qabul qilindi va saqlandi" : "Bazaga ulanishda xatolik yuz berdi") : "To'lov qabul qilindi");
+      // Haqiqiy mashina band qilingan bo'lsa, uni "Band" deb belgilaymiz —
+      // shunda boshqa ijaraga oluvchilarga ko'rinmay qoladi va mashina
+      // egasining "Mening mashinalarim" ro'yxatida ham holati yangilanadi.
+      if(res.ok && car.isReal && car.dbId != null){
+        await markCarStatus(car.dbId, 'Band');
+      }
       return navigate('booking-success');
     }
   }
@@ -829,12 +850,8 @@ app.addEventListener('click', async (e) => {
       store.ownerCarStatus = newStatus; // ekranda darhol ko'rinishi uchun
       render();
       if(store.ownerCarId != null){
-        const res = await dbUpdateCarStatus(store.ownerCarId, newStatus);
-        if(res.ok){
-          const row = realCarRows.find(r => r.id === store.ownerCarId);
-          if(row) row.status = newStatus;
-          refreshCarsFromRows(); // ijaraga oluvchilar ko'rgan ro'yxat ham darhol yangilansin
-        } else if(dbReady()){
+        const res = await markCarStatus(store.ownerCarId, newStatus);
+        if(!res.ok && dbReady()){
           showToast("Bazaga ulanishda xatolik yuz berdi");
         }
         render();
