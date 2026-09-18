@@ -151,6 +151,21 @@ function fmt(n){ return Number(n).toLocaleString('ru-RU').replace(/,/g,' '); }
 /* ---------------- real cars (owner-qo'shgan, Supabase'dan) ---------------- */
 
 let realCarsLoaded = false;
+let realCarRows = []; // owner-qo'shgan mashinalarning xom (DB) qatorlari — "Mening mashinalarim" statistikasi uchun
+
+function ownerRealCars(){
+  const phone = store.currentUser ? store.currentUser.phone : '';
+  if(!phone) return [];
+  return realCarRows.filter(r => r.owner_phone === phone);
+}
+
+function ownerRealStats(){
+  const rows = ownerRealCars();
+  const total = rows.length;
+  const busy = rows.filter(r => r.status === 'Band').length;
+  const free = total - busy;
+  return { total, free, busy };
+}
 
 function mapDbCarToAppCar(row){
   const transKey = (row.transmission||'').toLowerCase()==='mexanika' ? 'mexanika' : 'avtomat';
@@ -177,10 +192,12 @@ function mapDbCarToAppCar(row){
 
 async function loadRealCars(){
   const res = await dbListCars();
-  if(!res.ok || !res.data.length) return;
+  if(!res.ok) return;
+  realCarRows = res.data || [];
+
   const existingIds = new Set(CARS.map(c=>c.id));
   let added = false;
-  res.data.forEach(row => {
+  realCarRows.forEach(row => {
     const mapped = mapDbCarToAppCar(row);
     if(!existingIds.has(mapped.id)){
       CARS.unshift(mapped);
@@ -188,10 +205,10 @@ async function loadRealCars(){
       added = true;
     }
   });
-  if(added){
-    realCarsLoaded = true;
-    render();
-  }
+  if(added) realCarsLoaded = true;
+
+  // "Mening mashinalarim" ekranida bo'lsa, statistika/ro'yxat darhol yangilansin
+  if(added || store.screen === 'owner-cars') render();
 }
 
 /* ---------------- screen templates ---------------- */
@@ -448,6 +465,8 @@ function screenLanguageSettings(){
 }
 
 function screenOwnerCars(){
+  const rows = ownerRealCars();
+  const stats = ownerRealStats();
   return `${topBar('Mening mashinalarim')}
   <div class="screen-body no-pad" style="padding:0 20px 100px">
     <div class="section-header">
@@ -455,18 +474,21 @@ function screenOwnerCars(){
       <button class="topbar-icon" data-nav="add-car">${icon('plus')}</button>
     </div>
     <div class="stat-row">
-      <div class="stat-box"><b>${OWNER_STATS.total}</b><span>Jami</span></div>
-      <div class="stat-box"><b>${OWNER_STATS.free}</b><span>Bo'sh</span></div>
-      <div class="stat-box"><b>${OWNER_STATS.busy}</b><span>Band</span></div>
+      <div class="stat-box"><b>${stats.total}</b><span>Jami</span></div>
+      <div class="stat-box"><b>${stats.free}</b><span>Bo'sh</span></div>
+      <div class="stat-box"><b>${stats.busy}</b><span>Band</span></div>
     </div>
-    <div class="income-hero"><span>Bu oy daromad</span><b>${OWNER_STATS.monthIncome}</b></div>
     <div class="section-title">Mashinalaringiz</div>
-    ${OWNER_CARS.map(c => `
-      <button class="owner-car-row" style="width:100%;text-align:left" data-nav="car-status" data-owner-car="${c.name}" data-status="${c.status}">
+    ${rows.length ? rows.map(r => `
+      <button class="owner-car-row" style="width:100%;text-align:left" data-nav="car-status" data-owner-car="${r.model||'Nomsiz mashina'}" data-status="${r.status||"Bo'sh"}">
         <div class="thumb">${icon('car')}</div>
-        <div class="info"><b>${c.name}</b><span>${c.trans} · ${c.seats} o'rin</span></div>
-        <span class="badge ${c.status==="Bo'sh"?'success':'warning'}">${c.status}</span>
-      </button>`).join('')}
+        <div class="info"><b>${r.model||'Nomsiz mashina'}</b><span>${r.transmission||''}${r.year ? ' · '+r.year+' yil' : ''}</span></div>
+        <span class="badge ${r.status==="Bo'sh"?'success':'warning'}">${r.status||"Bo'sh"}</span>
+      </button>`).join('') : `
+      <div class="card" style="text-align:center;color:var(--color-text-secondary)">
+        <p style="margin:8px 0 2px">Hali mashina qo'shmagansiz.</p>
+        <p class="text-small">Yuqoridagi + tugmasini bosib birinchi mashinangizni qo'shing.</p>
+      </div>`}
   </div>
   ${bottomNav('owner-cars')}`;
 }
