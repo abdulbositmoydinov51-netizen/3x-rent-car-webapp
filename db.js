@@ -77,6 +77,21 @@ async function dbSaveCar(car) {
   }
 }
 
+async function dbUpdateCarStatus(carId, status) {
+  if (!dbReady()) return { ok: false, reason: 'no-config' };
+  try {
+    // Faqat "status" ustunini yangilaydi — bazada anon kalitga faqat shu
+    // ustunni o'zgartirishga ruxsat berilgan (schema.sql'ga qarang), narx,
+    // model kabi boshqa maydonlarni anon kalit bilan o'zgartirib bo'lmaydi.
+    const { error } = await supabaseClient.from('cars').update({ status }).eq('id', carId);
+    if (error) throw error;
+    return { ok: true };
+  } catch (e) {
+    console.error('dbUpdateCarStatus xato:', e);
+    return { ok: false, reason: e.message };
+  }
+}
+
 async function dbFindUserByPhone(phone) {
   if (!dbReady()) return { ok: false, reason: 'no-config', user: null };
   try {
