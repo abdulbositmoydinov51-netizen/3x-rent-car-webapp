@@ -18,6 +18,9 @@ const store = {
   ownerCarStatus: 'Bo‘sh', // demo toggle for "Mashina holati" screen
   ownerCarStatusName: 'Chevrolet Cobalt',
   agree: false,
+  currentUser: null,        // { name, phone, role } — set on register/login
+  addCarTrans: 'Avtomat',
+  addCarCat: 'ekonom',
 };
 
 const app = document.getElementById('app');
@@ -192,11 +195,11 @@ function screenRegister(){
       <p class="text-secondary text-body" style="margin:6px 0 22px">${owner ? "Mashinalaringizni ijaraga qo'yib, daromad qiling" : "O'zbekiston bo'ylab minglab avtomobil — bitta ilovada"}</p>
     </div>
     <div class="h-subtitle" style="margin-bottom:16px">Ro'yxatdan o'tish</div>
-    <div class="field"><label>Ism va familiya</label><input type="text" placeholder="Ism Familiya"/></div>
-    <div class="field"><label>Telefon raqam</label><input type="tel" placeholder="+998 90 123 45 67"/></div>
-    <div class="field"><label>Parol</label><input type="password" placeholder="Parol o'rnating"/></div>
+    <div class="field"><label>Ism va familiya</label><input id="reg-name" type="text" placeholder="Ism Familiya"/></div>
+    <div class="field"><label>Telefon raqam</label><input id="reg-phone" type="tel" placeholder="+998 90 123 45 67"/></div>
+    <div class="field"><label>Parol</label><input id="reg-password" type="password" placeholder="Parol o'rnating"/></div>
     <label class="checkbox-row"><input type="checkbox"/><span>Foydalanish shartlariga roziman</span></label>
-    <button class="btn btn-primary" data-nav="${owner ? 'owner-cars' : 'home'}" data-reset="1">Ro'yxatdan o'tish</button>
+    <button class="btn btn-primary" data-submit="register" data-role="${owner ? 'owner' : 'rider'}" data-target="${owner ? 'owner-cars' : 'home'}">Ro'yxatdan o'tish</button>
     <p class="text-small center" style="margin-top:16px">Akkountingiz bormi? <a data-nav="login" style="color:var(--color-accent-primary);font-weight:600;text-decoration:none">Kirish</a></p>
   </div>`;
 }
@@ -207,10 +210,10 @@ function screenLogin(){
       <div class="h-page">Xush kelibsiz</div>
       <p class="text-secondary text-body" style="margin:6px 0 26px">Hisobingizga kiring va safaringizni davom ettiring</p>
     </div>
-    <div class="field"><label>Telefon raqam</label><input type="tel" placeholder="+998 90 123 45 67"/></div>
-    <div class="field"><label>Parol</label><input type="password" placeholder="Parolingiz"/></div>
+    <div class="field"><label>Telefon raqam</label><input id="login-phone" type="tel" placeholder="+998 90 123 45 67"/></div>
+    <div class="field"><label>Parol</label><input id="login-password" type="password" placeholder="Parolingiz"/></div>
     <p class="text-small" style="text-align:right;margin:-6px 0 20px"><a data-action="toast" data-msg="Parolni tiklash havolasi yuborildi (demo)" style="color:var(--color-accent-primary);font-weight:600;text-decoration:none">Parolni unutdingizmi?</a></p>
-    <button class="btn btn-primary" data-nav="${store.role==='owner'?'owner-cars':'home'}" data-reset="1">Kirish</button>
+    <button class="btn btn-primary" data-submit="login" data-target="${store.role==='owner'?'owner-cars':'home'}">Kirish</button>
     <p class="text-small center" style="margin-top:16px">Akkountingiz yo'qmi? <a data-nav="role-select" style="color:var(--color-accent-primary);font-weight:600;text-decoration:none">Ro'yxatdan o'tish</a></p>
   </div>`;
 }
@@ -320,7 +323,7 @@ function screenBooking(){
   </div>
   <div class="sticky-cta">
     <div class="price"><span>Jami to'lov</span><b class="text-price">${BOOKING_DETAIL.total}</b></div>
-    <button class="btn btn-primary" data-action="confirm-booking">To'lovni tasdiqlash</button>
+    <button class="btn btn-primary" data-submit="booking" data-car="${car.name}">To'lovni tasdiqlash</button>
   </div>`;
 }
 
@@ -363,8 +366,8 @@ function screenProfile(){
   return `${topBar('Profil')}
   <div class="screen-body no-pad" style="padding:0 20px 100px">
     <div class="profile-head">
-      <div class="avatar">AB</div>
-      <div><b style="display:block">Abdulbosit Moydinov</b><span>+998 90 123 45 67</span></div>
+      <div class="avatar">${(store.currentUser && store.currentUser.name ? store.currentUser.name : 'Abdulbosit Moydinov').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
+      <div><b style="display:block">${(store.currentUser && store.currentUser.name) || 'Abdulbosit Moydinov'}</b><span>${(store.currentUser && store.currentUser.phone) || '+998 90 123 45 67'}</span></div>
     </div>
     <div class="menu-list" style="margin-bottom:14px">
       ${owner ? `
@@ -454,23 +457,22 @@ function screenAddCar(){
   return `${backHeader("Yangi mashina qo'shish")}
   <div class="screen-body no-nav-pad" style="padding-top:10px">
     <button class="upload-box" style="width:100%" data-action="toast" data-msg="Rasm yuklash (demo)">${icon('camera')}Rasm qo'shish</button>
-    <div class="field"><label>Mashina modeli</label><input type="text" placeholder="Masalan: Chevrolet Cobalt"/></div>
-    <div class="field"><label>Ishlab chiqarilgan yili</label><input type="text" placeholder="2023"/></div>
-    <div class="field"><label>Kunlik narx (so'm)</label><input type="text" placeholder="350 000"/></div>
+    <div class="field"><label>Mashina modeli</label><input id="car-model" type="text" placeholder="Masalan: Chevrolet Cobalt"/></div>
+    <div class="field"><label>Ishlab chiqarilgan yili</label><input id="car-year" type="text" placeholder="2023"/></div>
+    <div class="field"><label>Kunlik narx (so'm)</label><input id="car-price" type="text" placeholder="350 000"/></div>
     <div class="section-title" style="margin-bottom:10px">Uzatma turi</div>
     <div class="chip-row">
-      <button class="chip selected">Avtomat</button>
-      <button class="chip">Mexanika</button>
+      <button class="chip ${store.addCarTrans==='Avtomat'?'selected':''}" data-action="select-chip" data-group="addcar-trans" data-value="Avtomat">Avtomat</button>
+      <button class="chip ${store.addCarTrans==='Mexanika'?'selected':''}" data-action="select-chip" data-group="addcar-trans" data-value="Mexanika">Mexanika</button>
     </div>
     <div class="section-title" style="margin-bottom:10px">Toifasi</div>
     <div class="chip-row">
-      <button class="chip selected">Ekonom</button>
-      <button class="chip">Komfort</button>
-      <button class="chip">Premium</button>
-      <button class="chip">SUV</button>
-      <button class="chip">Elektro</button>
+      ${['ekonom','komfort','premium','suv','elektro'].map(key => {
+        const cat = CATEGORIES.find(c=>c.key===key);
+        return `<button class="chip ${store.addCarCat===key?'selected':''}" data-action="select-chip" data-group="addcar-cat" data-value="${key}">${cat.label}</button>`;
+      }).join('')}
     </div>
-    <button class="btn btn-primary" style="margin-top:8px" data-nav="owner-cars" data-action="toast" data-msg="Mashina qo'shildi (demo)">Saqlash</button>
+    <button class="btn btn-primary" style="margin-top:8px" data-submit="add-car">Saqlash</button>
   </div>`;
 }
 
@@ -543,9 +545,64 @@ function render(){
 
 /* ---------------- event delegation ---------------- */
 
-app.addEventListener('click', (e) => {
+app.addEventListener('click', async (e) => {
+  const submitEl = e.target.closest('[data-submit]');
   const navEl = e.target.closest('[data-nav]');
   const actionEl = e.target.closest('[data-action]');
+
+  if(submitEl){
+    const kind = submitEl.getAttribute('data-submit');
+
+    if(kind === 'register'){
+      const name = (document.getElementById('reg-name')||{}).value || '';
+      const phone = (document.getElementById('reg-phone')||{}).value || '';
+      const role = submitEl.dataset.role;
+      store.currentUser = { name: name.trim() || 'Mehmon', phone: phone.trim(), role };
+      const res = await dbSaveUser(store.currentUser);
+      if(dbReady()) showToast(res.ok ? "Ma'lumotlaringiz saqlandi" : "Bazaga ulanishda xatolik yuz berdi");
+      return resetTo(submitEl.dataset.target, { role });
+    }
+
+    if(kind === 'login'){
+      const phone = (document.getElementById('login-phone')||{}).value || '';
+      if(!store.currentUser) store.currentUser = { name: 'Mehmon', phone: phone.trim(), role: store.role };
+      return resetTo(submitEl.dataset.target);
+    }
+
+    if(kind === 'add-car'){
+      const model = (document.getElementById('car-model')||{}).value || '';
+      const year = (document.getElementById('car-year')||{}).value || '';
+      const price = (document.getElementById('car-price')||{}).value || '';
+      const catObj = CATEGORIES.find(c=>c.key===store.addCarCat);
+      const res = await dbSaveCar({
+        ownerName: store.currentUser ? store.currentUser.name : '',
+        ownerPhone: store.currentUser ? store.currentUser.phone : '',
+        model: model.trim() || 'Nomsiz mashina',
+        year: year.trim(),
+        transmission: store.addCarTrans,
+        category: catObj ? catObj.label : store.addCarCat,
+        price: price.trim(),
+        status: "Bo‘sh",
+      });
+      showToast(dbReady() ? (res.ok ? "Mashina saqlandi" : "Bazaga ulanishda xatolik yuz berdi") : "Mashina qo'shildi (demo)");
+      return navigate('owner-cars');
+    }
+
+    if(kind === 'booking'){
+      const car = CARS.find(c=>c.id===store.selectedCarId) || CARS[0];
+      const res = await dbSaveBooking({
+        renterName: store.currentUser ? store.currentUser.name : '',
+        renterPhone: store.currentUser ? store.currentUser.phone : '',
+        carName: submitEl.dataset.car || car.name,
+        pickup: BOOKING_DETAIL.pickup,
+        dropoff: BOOKING_DETAIL.dropoff,
+        total: BOOKING_DETAIL.total,
+        paymentMethod: store.payMethod,
+      });
+      showToast(dbReady() ? (res.ok ? "To'lov qabul qilindi va saqlandi" : "Bazaga ulanishda xatolik yuz berdi") : "To'lov qabul qilindi");
+      return navigate('booking-success');
+    }
+  }
 
   if(navEl){
     const screen = navEl.getAttribute('data-nav');
@@ -574,9 +631,10 @@ app.addEventListener('click', (e) => {
       if(group === 'pay') store.payMethod = value;
       if(group === 'lang') store.lang = value;
       if(group === 'booking-tab') store.bookingTab = value;
+      if(group === 'addcar-trans') store.addCarTrans = value;
+      if(group === 'addcar-cat') store.addCarCat = value;
       return render();
     }
-    if(action === 'confirm-booking'){ showToast("To'lov qabul qilindi"); return navigate('booking-success'); }
     if(action === 'select-role'){
       store.role = actionEl.dataset.value;
       return navigate('register');
@@ -618,6 +676,8 @@ function initTelegram(){
 }
 
 /* ---------------- boot ---------------- */
+
+window.store = store; // debugging/testing convenience
 
 setTheme(store.theme);
 render();
