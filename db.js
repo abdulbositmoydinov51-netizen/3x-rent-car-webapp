@@ -1,3 +1,7 @@
+/* Supabase bilan ishlash — yozish (insert) funksiyalari.
+   config.js to'ldirilmagan bo'lsa, bu funksiyalar jim ishlamaydi (xato bermaydi),
+   ilova baribir demo rejimida to'liq ishlayveradi. */
+
 let supabaseClient = null;
 try {
   if (
@@ -10,7 +14,7 @@ try {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
 } catch (e) {
-  console.warn('Supabase mijozini ishga tushirib bo\u2018lmadi:', e);
+  console.warn('Supabase mijozini ishga tushirib bo‘lmadi:', e);
 }
 
 function dbReady() {
@@ -52,13 +56,44 @@ async function dbSaveCar(car) {
       transmission: car.transmission || null,
       category: car.category || null,
       price: car.price || null,
-      status: car.status || 'Bo\u2018sh',
+      status: car.status || 'Bo‘sh',
     });
     if (error) throw error;
     return { ok: true };
   } catch (e) {
     console.error('dbSaveCar xato:', e);
     return { ok: false, reason: e.message };
+  }
+}
+
+async function dbFindUserByPhone(phone) {
+  if (!dbReady()) return { ok: false, reason: 'no-config', user: null };
+  try {
+    // Bu Supabase'dagi maxsus SQL funksiya (find_user_by_phone) orqali ishlaydi —
+    // butun "users" jadvalini o'qish o'rniga, faqat bitta mos telefon raqamiga
+    // tegishli yozuvni qaytaradi (schema.sql ga qarang).
+    const { data, error } = await supabaseClient.rpc('find_user_by_phone', { p_phone: phone });
+    if (error) throw error;
+    const user = (data && data[0]) || null;
+    return { ok: true, user };
+  } catch (e) {
+    console.error('dbFindUserByPhone xato:', e);
+    return { ok: false, reason: e.message, user: null };
+  }
+}
+
+async function dbListCars() {
+  if (!dbReady()) return { ok: false, reason: 'no-config', data: [] };
+  try {
+    const { data, error } = await supabaseClient
+      .from('cars')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return { ok: true, data: data || [] };
+  } catch (e) {
+    console.error('dbListCars xato:', e);
+    return { ok: false, reason: e.message, data: [] };
   }
 }
 
