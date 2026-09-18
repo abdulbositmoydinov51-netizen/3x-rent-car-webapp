@@ -752,7 +752,9 @@ function initTelegram(){
   if(!tg) return;
   tg.ready();
   tg.expand();
-  if(tg.colorScheme === 'dark') setTheme('dark');
+  // Eslatma: ilova doim kunduzgi (light) rejimda ochiladi — Telegram'ning
+  // o'z tungi rejimiga qarab avtomatik almashtirilmaydi. Tungi rejim faqat
+  // foydalanuvchi Profil ichidagi "Tungi rejim" tugmasini bosganda yonadi.
   tg.BackButton.onClick(() => goBack());
   syncTelegramChrome();
   syncTelegramBackButton();
