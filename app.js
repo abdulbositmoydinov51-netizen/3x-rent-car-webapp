@@ -15,7 +15,7 @@ const store = {
   payMethod: 'Payme',
   lang: 'UZ',
   galleryIdx: 0,
-  ownerCarStatus: 'Bo‘sh', // demo toggle for "Mashina holati" screen
+  ownerCarStatus: "Bo'sh", // demo toggle for "Mashina holati" screen
   ownerCarStatusName: 'Chevrolet Cobalt',
   agree: false,
   currentUser: null,        // { name, phone, role } — set on register/login
@@ -465,7 +465,7 @@ function screenOwnerCars(){
       <button class="owner-car-row" style="width:100%;text-align:left" data-nav="car-status" data-owner-car="${c.name}" data-status="${c.status}">
         <div class="thumb">${icon('car')}</div>
         <div class="info"><b>${c.name}</b><span>${c.trans} · ${c.seats} o'rin</span></div>
-        <span class="badge ${c.status==='Bo‘sh'?'success':'warning'}">${c.status}</span>
+        <span class="badge ${c.status==="Bo'sh"?'success':'warning'}">${c.status}</span>
       </button>`).join('')}
   </div>
   ${bottomNav('owner-cars')}`;
@@ -555,7 +555,7 @@ function screenIncome(){
           <div class="payment-row">
             <div class="avatar">${icon('car')}</div>
             <div class="info"><b>${p.name}</b><span>${p.date}</span></div>
-            <div class="amt"><b>${p.amount}</b><span class="badge ${p.status==='To‘landi'?'success':'warning'}" style="margin-top:4px">${p.status}</span></div>
+            <div class="amt"><b>${p.amount}</b><span class="badge ${p.status==="To'landi"?'success':'warning'}" style="margin-top:4px">${p.status}</span></div>
           </div>`).join('')}
       </div>
     </div>
@@ -642,7 +642,7 @@ app.addEventListener('click', async (e) => {
         transmission: store.addCarTrans,
         category: catObj ? catObj.label : store.addCarCat,
         price: price.trim(),
-        status: "Bo‘sh",
+        status: "Bo'sh",
       });
       showToast(dbReady() ? (res.ok ? "Mashina saqlandi" : "Bazaga ulanishda xatolik yuz berdi") : "Mashina qo'shildi (demo)");
       if(res.ok) loadRealCars();
@@ -701,7 +701,7 @@ app.addEventListener('click', async (e) => {
       return navigate('register');
     }
     if(action === 'car-status-toggle'){
-      store.ownerCarStatus = store.ownerCarStatus === 'Band' ? "Bo‘sh" : 'Band';
+      store.ownerCarStatus = store.ownerCarStatus === 'Band' ? "Bo'sh" : 'Band';
       return render();
     }
   }
