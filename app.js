@@ -42,6 +42,29 @@ function setTheme(theme){
   syncTelegramChrome();
 }
 
+/* ---------------- session (qayta ochilganda ham "kirgan" holatda qolish) ---------------- */
+
+const SESSION_KEY = '3xrc_session';
+
+function saveSession(){
+  try {
+    if(store.currentUser){
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ user: store.currentUser, role: store.role }));
+    }
+  } catch(e) { /* localStorage yo'q bo'lsa ham ilova ishlashda davom etadi */ }
+}
+
+function clearSession(){
+  try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+}
+
+function loadSession(){
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
 function navigate(screen, opts){
   opts = opts || {};
   if(store.screen !== screen){
@@ -444,7 +467,7 @@ function screenProfile(){
       <button class="menu-item" data-nav="language-settings">${icon('globe')}<span>Til sozlamalari</span>${icon('chevron','chev')}</button>
       <button class="menu-item" data-action="toggle-theme">${icon('moon')}<span>Tungi rejim</span><span class="toggle ${store.theme==='dark'?'on':''}"></span></button>
       <button class="menu-item" data-action="toast" data-msg="Yordam markazi (demo)">${icon('help')}<span>Yordam markazi</span>${icon('chevron','chev')}</button>
-      <button class="menu-item danger" data-nav="welcome" data-reset="1">${icon('logout')}<span>Chiqish</span></button>
+      <button class="menu-item danger" data-nav="welcome" data-reset="1" data-logout="1">${icon('logout')}<span>Chiqish</span></button>
     </div>
     <button class="btn btn-ghost" data-action="toast" data-msg="Rol almashtirish (demo)" data-nav="role-select">Rolni almashtirish</button>
   </div>
@@ -627,8 +650,10 @@ app.addEventListener('click', async (e) => {
       const phone = (document.getElementById('reg-phone')||{}).value || '';
       const role = submitEl.dataset.role;
       store.currentUser = { name: name.trim() || 'Mehmon', phone: phone.trim(), role };
+      store.role = role;
       const res = await dbSaveUser(store.currentUser);
       if(dbReady()) showToast(res.ok ? "Ma'lumotlaringiz saqlandi" : "Bazaga ulanishda xatolik yuz berdi");
+      saveSession();
       return resetTo(submitEl.dataset.target, { role });
     }
 
@@ -646,12 +671,17 @@ app.addEventListener('click', async (e) => {
       }
       store.currentUser = user;
       store.role = user.role;
+      if(found) saveSession();
       if(dbReady()) showToast(found ? `Xush kelibsiz, ${user.name}!` : "Akkount topilmadi, mehmon sifatida kirdingiz");
       const target = user.role === 'owner' ? 'owner-cars' : 'home';
       return resetTo(target);
     }
 
     if(kind === 'add-car'){
+      if(!store.currentUser || !store.currentUser.phone){
+        showToast("Avval ro'yxatdan o'ting yoki hisobingizga kiring");
+        return resetTo('register', { role: 'owner' });
+      }
       const model = (document.getElementById('car-model')||{}).value || '';
       const year = (document.getElementById('car-year')||{}).value || '';
       const price = (document.getElementById('car-price')||{}).value || '';
@@ -694,6 +724,11 @@ app.addEventListener('click', async (e) => {
     if(navEl.dataset.cat){ opts.categoryKey = navEl.dataset.cat; }
     if(navEl.dataset.ownerCar){ opts.ownerCarStatusName = navEl.dataset.ownerCar; opts.ownerCarStatus = navEl.dataset.status; }
     if(screen === 'search-results' && !navEl.dataset.cat){ opts.categoryKey = null; }
+    if(navEl.dataset.logout){
+      clearSession();
+      opts.currentUser = null;
+      opts.role = 'rider';
+    }
     if(navEl.dataset.reset){
       resetTo(screen, opts);
     } else {
@@ -764,6 +799,16 @@ function initTelegram(){
 
 window.store = store; // debugging/testing convenience
 window.CARS = CARS;   // debugging/testing convenience
+
+// Ilova qayta ochilganda avvalgi "kirgan" holatni tiklaymiz — har safar
+// qayta "Kirish" bosishga majburlamaslik uchun (Telegram mini ilovalar
+// ko'pincha har ochilishda sahifani yangidan yuklaydi).
+const savedSession = loadSession();
+if(savedSession && savedSession.user && savedSession.user.phone){
+  store.currentUser = savedSession.user;
+  store.role = savedSession.role || savedSession.user.role || 'rider';
+  store.screen = store.role === 'owner' ? 'owner-cars' : 'home';
+}
 
 setTheme(store.theme);
 render();
