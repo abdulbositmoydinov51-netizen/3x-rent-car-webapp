@@ -15,8 +15,9 @@ const store = {
   payMethod: 'Payme',
   lang: 'UZ',
   galleryIdx: 0,
-  ownerCarStatus: "Bo'sh", // demo toggle for "Mashina holati" screen
+  ownerCarStatus: "Bo'sh",
   ownerCarStatusName: 'Chevrolet Cobalt',
+  ownerCarId: null,          // haqiqiy (DB) mashina bo'lsa, uning id'si — "Band"/"Bo'sh" ni bazaga yozish uchun
   agree: false,
   currentUser: null,        // { name, phone, role } — set on register/login
   addCarTrans: 'Avtomat',
@@ -36,10 +37,16 @@ function showToast(msg){
   toastTimer = setTimeout(()=> toastEl.classList.remove('show'), 1800);
 }
 
+const THEME_KEY = '3xrc_theme';
+
 function setTheme(theme){
   store.theme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   syncTelegramChrome();
+  // Foydalanuvchi tanlagan rejim (kunduzgi/tungi) qayta ochilganda ham
+  // saqlanib qolsin — bo'lmasa har safar yangilanganda kunduzgiga qaytib
+  // ketaveradi.
+  try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
 }
 
 /* ---------------- session (qayta ochilganda ham "kirgan" holatda qolish) ---------------- */
@@ -503,7 +510,7 @@ function screenOwnerCars(){
     </div>
     <div class="section-title">Mashinalaringiz</div>
     ${rows.length ? rows.map(r => `
-      <button class="owner-car-row" style="width:100%;text-align:left" data-nav="car-status" data-owner-car="${r.model||'Nomsiz mashina'}" data-status="${r.status||"Bo'sh"}">
+      <button class="owner-car-row" style="width:100%;text-align:left" data-nav="car-status" data-owner-car="${r.model||'Nomsiz mashina'}" data-status="${r.status||"Bo'sh"}" data-car-id="${r.id}">
         <div class="thumb">${icon('car')}</div>
         <div class="info"><b>${r.model||'Nomsiz mashina'}</b><span>${r.transmission||''}${r.year ? ' · '+r.year+' yil' : ''}</span></div>
         <span class="badge ${r.status==="Bo'sh"?'success':'warning'}">${r.status||"Bo'sh"}</span>
@@ -722,7 +729,11 @@ app.addEventListener('click', async (e) => {
     const opts = {};
     if(navEl.dataset.car) opts.selectedCarId = navEl.dataset.car;
     if(navEl.dataset.cat){ opts.categoryKey = navEl.dataset.cat; }
-    if(navEl.dataset.ownerCar){ opts.ownerCarStatusName = navEl.dataset.ownerCar; opts.ownerCarStatus = navEl.dataset.status; }
+    if(navEl.dataset.ownerCar){
+      opts.ownerCarStatusName = navEl.dataset.ownerCar;
+      opts.ownerCarStatus = navEl.dataset.status;
+      opts.ownerCarId = navEl.dataset.carId ? Number(navEl.dataset.carId) : null;
+    }
     if(screen === 'search-results' && !navEl.dataset.cat){ opts.categoryKey = null; }
     if(navEl.dataset.logout){
       clearSession();
@@ -758,8 +769,20 @@ app.addEventListener('click', async (e) => {
       return navigate('register');
     }
     if(action === 'car-status-toggle'){
-      store.ownerCarStatus = store.ownerCarStatus === 'Band' ? "Bo'sh" : 'Band';
-      return render();
+      const newStatus = store.ownerCarStatus === 'Band' ? "Bo'sh" : 'Band';
+      store.ownerCarStatus = newStatus; // ekranda darhol ko'rinishi uchun
+      render();
+      if(store.ownerCarId != null){
+        const res = await dbUpdateCarStatus(store.ownerCarId, newStatus);
+        if(res.ok){
+          const row = realCarRows.find(r => r.id === store.ownerCarId);
+          if(row) row.status = newStatus;
+        } else if(dbReady()){
+          showToast("Bazaga ulanishda xatolik yuz berdi");
+        }
+        render();
+      }
+      return;
     }
   }
 });
@@ -810,7 +833,15 @@ if(savedSession && savedSession.user && savedSession.user.phone){
   store.screen = store.role === 'owner' ? 'owner-cars' : 'home';
 }
 
-setTheme(store.theme);
+// Avvalgi saqlangan rejim (kunduzgi/tungi) bo'lsa, o'shani, bo'lmasa
+// standart kunduzgi rejimni qo'llaymiz.
+let initialTheme = store.theme;
+try {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  if(savedTheme === 'dark' || savedTheme === 'light') initialTheme = savedTheme;
+} catch(e) {}
+
+setTheme(initialTheme);
 render();
 initTelegram();
 loadRealCars();
