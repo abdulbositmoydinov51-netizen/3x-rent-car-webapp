@@ -14,7 +14,7 @@ try {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
 } catch (e) {
-  console.warn('Supabase mijozini ishga tushirib bo‘lmadi:', e);
+  console.warn("Supabase mijozini ishga tushirib bo'lmadi:", e);
 }
 
 function dbReady() {
@@ -56,7 +56,7 @@ async function dbSaveCar(car) {
       transmission: car.transmission || null,
       category: car.category || null,
       price: car.price || null,
-      status: car.status || 'Bo‘sh',
+      status: car.status || "Bo'sh",
     });
     if (error) throw error;
     return { ok: true };
