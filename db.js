@@ -3,22 +3,33 @@
    ilova baribir demo rejimida to'liq ishlayveradi. */
 
 let supabaseClient = null;
-try {
-  if (
-    window.supabase &&
-    typeof SUPABASE_URL === 'string' &&
-    typeof SUPABASE_ANON_KEY === 'string' &&
-    !SUPABASE_URL.includes('YOUR-PROJECT') &&
-    !SUPABASE_ANON_KEY.includes('YOUR-ANON')
-  ) {
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Mijozni "dangasa" (lazy) tarzda ishga tushiramiz — bir marta emas, har safar
+// dbReady() chaqirilganda qayta tekshiramiz. Sabab: Supabase kutubxonasi CDN
+// orqali yuklanadi va sekin internetda db.js ishga tushgan paytda hali
+// ulgurmagan bo'lishi mumkin (index.html'da zaxira CDN ham qo'shilgan —
+// birinchisi ishlamasa, ikkinchisi biroz kechroq yuklanadi). Shu sababli
+// bir martalik tekshiruv o'rniga har safar qayta urinib ko'ramiz.
+function ensureSupabaseClient() {
+  if (supabaseClient) return true;
+  try {
+    if (
+      window.supabase &&
+      typeof SUPABASE_URL === 'string' &&
+      typeof SUPABASE_ANON_KEY === 'string' &&
+      !SUPABASE_URL.includes('YOUR-PROJECT') &&
+      !SUPABASE_ANON_KEY.includes('YOUR-ANON')
+    ) {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    }
+  } catch (e) {
+    console.warn("Supabase mijozini ishga tushirib bo'lmadi:", e);
   }
-} catch (e) {
-  console.warn("Supabase mijozini ishga tushirib bo'lmadi:", e);
+  return !!supabaseClient;
 }
 
 function dbReady() {
-  return !!supabaseClient;
+  return ensureSupabaseClient();
 }
 
 function tgUser() {
