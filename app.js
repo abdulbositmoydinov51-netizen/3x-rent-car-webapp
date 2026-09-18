@@ -744,6 +744,10 @@ app.addEventListener('click', async (e) => {
         showToast("Mashina modelini kiriting");
         return;
       }
+      if(!price.trim() || !/\d/.test(price)){
+        showToast("Kunlik narxni kiriting");
+        return;
+      }
       const catObj = CATEGORIES.find(c=>c.key===store.addCarCat);
       const res = await dbSaveCar({
         ownerName: store.currentUser ? store.currentUser.name : '',
