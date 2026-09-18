@@ -37,16 +37,53 @@ function showToast(msg){
   toastTimer = setTimeout(()=> toastEl.classList.remove('show'), 1800);
 }
 
+/* ---------------- doimiy saqlash: localStorage + Telegram CloudStorage ---------------
+   Ba'zi qurilmalarda (ayniqsa Telegram mini ilovani to'liq yopib qayta
+   ochganda) localStorage saqlanib qolmasligi mumkin. Shuning uchun Telegram
+   mini ilovalar uchun maxsus ishlab chiqilgan, ancha ishonchli CloudStorage'ga
+   ham (mavjud bo'lsa) parallel ravishda yozamiz/o'qiymiz. */
+
+function cloudSet(key, value){
+  try {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if(tg && tg.CloudStorage && tg.CloudStorage.setItem) tg.CloudStorage.setItem(key, value, function(){});
+  } catch(e) {}
+}
+
+function cloudRemove(key){
+  try {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if(tg && tg.CloudStorage && tg.CloudStorage.removeItem) tg.CloudStorage.removeItem(key, function(){});
+  } catch(e) {}
+}
+
+function cloudGet(key, cb){
+  try {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if(tg && tg.CloudStorage && tg.CloudStorage.getItem){
+      tg.CloudStorage.getItem(key, function(err, value){ cb(!err && value ? value : null); });
+      return;
+    }
+  } catch(e) {}
+  cb(null);
+}
+
 const THEME_KEY = '3xrc_theme';
 
 function setTheme(theme){
   store.theme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   syncTelegramChrome();
-  // Foydalanuvchi tanlagan rejim (kunduzgi/tungi) qayta ochilganda ham
-  // saqlanib qolsin — bo'lmasa har safar yangilanganda kunduzgiga qaytib
-  // ketaveradi.
+}
+
+// Foydalanuvchi rejimni ONGLI ravishda almashtirganda chaqiriladi — tanlovni
+// localStorage'ga VA Telegram CloudStorage'ga saqlaydi. (Diqqat: bu boot
+// paytida chaqirilmaydi — aks holda hali CloudStorage'dan o'qib ulgurmasdan
+// standart qiymat bilan uni ustidan yozib tashlagan bo'lardik.)
+function setThemeAndSave(theme){
+  setTheme(theme);
   try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
+  cloudSet(THEME_KEY, theme);
 }
 
 /* ---------------- session (qayta ochilganda ham "kirgan" holatda qolish) ---------------- */
@@ -54,15 +91,15 @@ function setTheme(theme){
 const SESSION_KEY = '3xrc_session';
 
 function saveSession(){
-  try {
-    if(store.currentUser){
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ user: store.currentUser, role: store.role }));
-    }
-  } catch(e) { /* localStorage yo'q bo'lsa ham ilova ishlashda davom etadi */ }
+  if(!store.currentUser) return;
+  const raw = JSON.stringify({ user: store.currentUser, role: store.role });
+  try { localStorage.setItem(SESSION_KEY, raw); } catch(e) { /* localStorage yo'q bo'lsa ham ilova ishlashda davom etadi */ }
+  cloudSet(SESSION_KEY, raw);
 }
 
 function clearSession(){
   try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+  cloudRemove(SESSION_KEY);
 }
 
 function loadSession(){
@@ -216,29 +253,31 @@ function mapDbCarToAppCar(row){
     reviews: null,
     cat: [catKey, transKey],
     ownerPhone: row.owner_phone || '',
+    status: row.status || "Bo'sh",
     isReal: true,
   };
+}
+
+// Haqiqiy (bazadan olingan) mashinalarni CARS ro'yxatiga har doim eng
+// so'nggi holatiga moslab qayta yozadi — shunda narx/holat ("Band"/"Bo'sh")
+// o'zgargani ham darhol aks etadi, eski nusxasi osilib qolmaydi.
+function refreshCarsFromRows(){
+  const demoOnly = CARS.filter(c => !c.isReal);
+  const mapped = realCarRows.map(mapDbCarToAppCar);
+  CARS.length = 0;
+  mapped.forEach(c => CARS.push(c));
+  demoOnly.forEach(c => CARS.push(c));
 }
 
 async function loadRealCars(){
   const res = await dbListCars();
   if(!res.ok) return;
   realCarRows = res.data || [];
+  refreshCarsFromRows();
+  realCarsLoaded = true;
 
-  const existingIds = new Set(CARS.map(c=>c.id));
-  let added = false;
-  realCarRows.forEach(row => {
-    const mapped = mapDbCarToAppCar(row);
-    if(!existingIds.has(mapped.id)){
-      CARS.unshift(mapped);
-      existingIds.add(mapped.id);
-      added = true;
-    }
-  });
-  if(added) realCarsLoaded = true;
-
-  // "Mening mashinalarim" ekranida bo'lsa, statistika/ro'yxat darhol yangilansin
-  if(added || store.screen === 'owner-cars') render();
+  // Foydalanuvchi hozir shu mashinalarni ko'rib turgan ekranda bo'lsa, darhol yangilansin
+  if(['owner-cars','home','search-results'].includes(store.screen)) render();
 }
 
 /* ---------------- screen templates ---------------- */
@@ -313,7 +352,8 @@ function screenLogin(){
 }
 
 function screenHome(){
-  const list = CARS.filter(c => store.homeChip==='barchasi' || c.cat.includes(store.homeChip)).slice(0,4);
+  const real = CARS.filter(c => c.isReal && c.status !== 'Band');
+  const list = real.filter(c => store.homeChip==='barchasi' || c.cat.includes(store.homeChip)).slice(0,4);
   return `${topBar('3X Rent Car')}
   <div class="screen-body no-pad" style="padding:0 20px 100px">
     <button class="search-box" style="width:100%;border:1px solid var(--color-border-subtle);text-align:left" data-nav="search-results">
@@ -322,7 +362,11 @@ function screenHome(){
     </button>
     ${chipRow(HOME_CHIPS, store.homeChip, 'home')}
     <div class="section-header"><div class="section-title" style="margin:0">Yaqin atrofdagi mashinalar</div><button class="link-accent" data-nav="search-results">Barchasi</button></div>
-    ${list.map(carCard).join('')}
+    ${list.length ? list.map(carCard).join('') : `
+      <div class="card" style="text-align:center;color:var(--color-text-secondary)">
+        <p style="margin:8px 0 2px">Hozircha mashinalar yo'q.</p>
+        <p class="text-small">Ijaraga beruvchilar mashina qo'shishi bilan shu yerda paydo bo'ladi.</p>
+      </div>`}
   </div>
   ${bottomNav('home')}`;
 }
@@ -330,17 +374,21 @@ function screenHome(){
 function screenSearchResults(){
   const cat = store.categoryKey ? CATEGORIES.find(c=>c.key===store.categoryKey) : null;
   const title = cat ? cat.title : 'Toshkent shahri';
-  const count = cat ? cat.count : 42;
   const activeChip = store.categoryKey || store.searchChip;
-  const list = CARS.filter(c => activeChip==='barchasi' || !activeChip || c.cat.includes(activeChip));
+  const real = CARS.filter(c => c.isReal && c.status !== 'Band');
+  const list = real.filter(c => activeChip==='barchasi' || !activeChip || c.cat.includes(activeChip));
   return `${backHeader(title)}
   <div class="screen-body no-nav-pad" style="padding-top:14px;padding-bottom:100px">
     <div class="section-header">
-      <div class="text-secondary text-small" style="font-weight:600">${count} ta mashina topildi</div>
+      <div class="text-secondary text-small" style="font-weight:600">${list.length} ta mashina topildi</div>
       <button class="link-accent" data-action="toast" data-msg="Saralash (demo)">Narx bo'yicha ↓</button>
     </div>
     ${chipRow(SEARCH_CHIPS, store.categoryKey ? (SEARCH_CHIPS.includes(store.categoryKey)?store.categoryKey:'barchasi') : store.searchChip, 'search')}
-    ${(list.length?list:CARS).map(carCard).join('')}
+    ${list.length ? list.map(carCard).join('') : `
+      <div class="card" style="text-align:center;color:var(--color-text-secondary)">
+        <p style="margin:8px 0 2px">Hozircha mashinalar yo'q.</p>
+        <p class="text-small">Ijaraga beruvchilar mashina qo'shishi bilan shu yerda paydo bo'ladi.</p>
+      </div>`}
   </div>
   ${bottomNav('search-results')}`;
 }
@@ -692,11 +740,15 @@ app.addEventListener('click', async (e) => {
       const model = (document.getElementById('car-model')||{}).value || '';
       const year = (document.getElementById('car-year')||{}).value || '';
       const price = (document.getElementById('car-price')||{}).value || '';
+      if(!model.trim()){
+        showToast("Mashina modelini kiriting");
+        return;
+      }
       const catObj = CATEGORIES.find(c=>c.key===store.addCarCat);
       const res = await dbSaveCar({
         ownerName: store.currentUser ? store.currentUser.name : '',
         ownerPhone: store.currentUser ? store.currentUser.phone : '',
-        model: model.trim() || 'Nomsiz mashina',
+        model: model.trim(),
         year: year.trim(),
         transmission: store.addCarTrans,
         category: catObj ? catObj.label : store.addCarCat,
@@ -751,7 +803,7 @@ app.addEventListener('click', async (e) => {
   if(actionEl){
     const action = actionEl.getAttribute('data-action');
     if(action === 'go-back') return goBack();
-    if(action === 'toggle-theme') return setTheme(store.theme==='dark' ? 'light' : 'dark'), render();
+    if(action === 'toggle-theme') return setThemeAndSave(store.theme==='dark' ? 'light' : 'dark'), render();
     if(action === 'toast') return showToast(actionEl.dataset.msg || '');
     if(action === 'select-chip'){
       const group = actionEl.dataset.group, value = actionEl.dataset.value;
@@ -777,6 +829,7 @@ app.addEventListener('click', async (e) => {
         if(res.ok){
           const row = realCarRows.find(r => r.id === store.ownerCarId);
           if(row) row.status = newStatus;
+          refreshCarsFromRows(); // ijaraga oluvchilar ko'rgan ro'yxat ham darhol yangilansin
         } else if(dbReady()){
           showToast("Bazaga ulanishda xatolik yuz berdi");
         }
@@ -847,3 +900,28 @@ initTelegram();
 loadRealCars();
 
 setTimeout(() => { if(store.screen === 'splash') resetTo('welcome'); }, 1600);
+
+// Telegram CloudStorage'dan ham tekshirib qo'yamiz (localStorage saqlanmagan
+// bo'lsa ham) — agar u yerda boshqacha qiymat topilsa, holatni to'g'rilaymiz.
+cloudGet(THEME_KEY, function(cloudTheme){
+  if((cloudTheme === 'dark' || cloudTheme === 'light') && cloudTheme !== store.theme){
+    setTheme(cloudTheme);
+    render();
+  }
+});
+if(!store.currentUser){
+  cloudGet(SESSION_KEY, function(raw){
+    if(!raw || store.currentUser) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.user && parsed.user.phone){
+        store.currentUser = parsed.user;
+        store.role = parsed.role || parsed.user.role || 'rider';
+        store.screen = store.role === 'owner' ? 'owner-cars' : 'home';
+        store.history = [];
+        render();
+        syncTelegramBackButton();
+      }
+    } catch(e) {}
+  });
+}
